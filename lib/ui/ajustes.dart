@@ -10,7 +10,7 @@ import 'arranque.dart';
 import 'comun.dart';
 import 'pin.dart';
 
-const versionApp = '1.0.0';
+const versionApp = '1.0.1';
 
 class PantallaAjustes extends StatefulWidget {
   const PantallaAjustes({super.key});
@@ -389,7 +389,7 @@ class _PantallaAjustesState extends State<PantallaAjustes> with WidgetsBindingOb
               ListTile(
                 leading: const Icon(Icons.info_outline),
                 title: const Text('Agenda de Crédito $versionApp'),
-                subtitle: Text('Tablet activada · equipo $_equipo\n© Riccijandro. Todos los derechos reservados.'),
+                subtitle: Text('Equipo $_equipo\n© Riccijandro. Todos los derechos reservados.'),
                 isThreeLine: true,
               ),
             ],

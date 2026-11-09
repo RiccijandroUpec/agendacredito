@@ -18,7 +18,12 @@ class Seguridad {
 
   static Future<String> codigoEquipo() async => Activacion.codigoEquipo(await androidId());
 
+  /// Apagado en 1.0.1 por pedido del usuario (instalar sin PC). Poner en true
+  /// para volver a exigir el código de activación por tablet.
+  static const exigirActivacion = false;
+
   static Future<bool> activado() async {
+    if (!exigirActivacion) return true;
     final codigo = await almacen.read(key: 'activacion');
     return codigo != null && Activacion.verificar(codigo, await androidId());
   }
