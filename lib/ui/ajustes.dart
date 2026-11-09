@@ -10,7 +10,7 @@ import 'arranque.dart';
 import 'comun.dart';
 import 'pin.dart';
 
-const versionApp = '1.0.1';
+const versionApp = '1.0.2';
 
 class PantallaAjustes extends StatefulWidget {
   const PantallaAjustes({super.key});

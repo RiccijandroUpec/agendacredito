@@ -23,6 +23,7 @@ Color colorEstado(Estado e) => switch (e) {
   Estado.pendienteCedula => const Color(0xFFE08A00),
   Estado.aprobado => const Color(0xFF1B8A3C),
   Estado.negado => const Color(0xFFC62828),
+  Estado.porConsultar => const Color(0xFF1565C0),
   Estado.atendido => const Color(0xFF455A64),
 };
 
@@ -30,8 +31,30 @@ IconData iconoEstado(Estado e) => switch (e) {
   Estado.pendienteCedula => Icons.hourglass_top,
   Estado.aprobado => Icons.check_circle,
   Estado.negado => Icons.cancel,
+  Estado.porConsultar => Icons.schedule,
   Estado.atendido => Icons.how_to_reg,
 };
+
+class ChipFaltaDocumento extends StatelessWidget {
+  const ChipFaltaDocumento({super.key});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(color: const Color(0x1FE08A00), borderRadius: BorderRadius.circular(20)),
+    child: const Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.hourglass_top, size: 16, color: Color(0xFFE08A00)),
+        SizedBox(width: 4),
+        Text(
+          'Falta documento',
+          style: TextStyle(color: Color(0xFFE08A00), fontWeight: FontWeight.w600, fontSize: 13),
+        ),
+      ],
+    ),
+  );
+}
 
 class ChipEstado extends StatelessWidget {
   final Estado estado;
@@ -79,6 +102,7 @@ class FilaCliente extends StatelessWidget {
     final c = cliente;
     final partes = <String>[
       if (c.cedula != null) c.cedula!,
+      if (c.ciudad.isNotEmpty) c.ciudad,
       if (c.monto != null && c.estado != Estado.negado) 'Cupo ${dinero.format(c.monto)}',
       if (c.telefono.isNotEmpty) c.telefono,
     ];
@@ -107,6 +131,7 @@ class FilaCliente extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             ChipEstado(c.estado),
+            if (c.cedula != null && !c.documento) ...[const SizedBox(height: 4), const ChipFaltaDocumento()],
             if (c.fechaVisita != null && c.estado != Estado.atendido && c.estado != Estado.negado) ...[
               const SizedBox(height: 4),
               Text(

@@ -10,7 +10,7 @@ class Repositorio {
   final Database db;
   Repositorio(this.db);
 
-  static const version = 1;
+  static const version = 2;
 
   static Future<void> crear(Database db, int _) async {
     await db.execute('''
@@ -21,6 +21,8 @@ class Repositorio {
         nombre_sri INTEGER NOT NULL DEFAULT 0,
         telefono TEXT NOT NULL DEFAULT '',
         nota TEXT NOT NULL DEFAULT '',
+        ciudad TEXT NOT NULL DEFAULT '',
+        documento INTEGER NOT NULL DEFAULT 1,
         estado TEXT NOT NULL,
         monto REAL,
         fecha_consulta TEXT,
@@ -38,6 +40,23 @@ class Repositorio {
     await db.execute('CREATE INDEX eventos_cliente ON eventos(cliente_id)');
     await db.execute('CREATE TABLE ajustes(clave TEXT PRIMARY KEY, valor TEXT)');
   }
+
+  /// 1.0.x → 1.0.2: ciudad y "trajo el documento".
+  static Future<void> migrar(Database db, int antes, int ahora) async {
+    if (antes < 2) {
+      await db.execute("ALTER TABLE clientes ADD COLUMN ciudad TEXT NOT NULL DEFAULT ''");
+      await db.execute('ALTER TABLE clientes ADD COLUMN documento INTEGER NOT NULL DEFAULT 1');
+      await db.execute("UPDATE clientes SET documento = 0 WHERE estado = 'pendiente_cedula' OR cedula IS NULL");
+    }
+  }
+
+  /// Ciudades ya usadas, para sugerirlas primero.
+  Future<List<String>> ciudades() async => [
+    for (final f in await db.rawQuery(
+      "SELECT ciudad, COUNT(*) n FROM clientes WHERE ciudad <> '' GROUP BY ciudad COLLATE NOCASE ORDER BY n DESC",
+    ))
+      f['ciudad'] as String,
+  ];
 
   static String nuevoId() => Cifrado.aleatorio(12).map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
@@ -131,7 +150,13 @@ class Repositorio {
         if (existe.isNotEmpty) throw StateError('La cédula ${c.cedula} ya está registrada');
       }
       await tx.insert('clientes', c.aFila());
-      await _sellar(tx, c.id, 'registro', {'cedula': c.cedula, 'nombre': c.nombre, ..._detalleConsulta(c)}, c.creadoEn);
+      await _sellar(tx, c.id, 'registro', {
+        'cedula': c.cedula,
+        'nombre': c.nombre,
+        'ciudad': c.ciudad,
+        'documento': c.documento,
+        ..._detalleConsulta(c),
+      }, c.creadoEn);
     });
     return c;
   }
@@ -147,6 +172,8 @@ class Repositorio {
     bool? nombreSri,
     String? telefono,
     String? notaExtra,
+    String? ciudad,
+    bool? documento,
   }) async {
     late Cliente nuevo;
     await db.transaction((tx) async {
@@ -163,6 +190,8 @@ class Repositorio {
         nombreSri: (nombre != null && c.nombre.trim().isEmpty) ? nombreSri : null,
         telefono: (telefono != null && telefono.trim().isNotEmpty) ? telefono.trim() : null,
         nota: _sumarNota(c.nota, notaExtra),
+        ciudad: (ciudad != null && ciudad.trim().isNotEmpty) ? ciudad.trim() : null,
+        documento: documento,
         actualizadoEn: ahora,
       );
       await tx.update('clientes', nuevo.aFila(), where: 'id = ?', whereArgs: [id]);
@@ -190,7 +219,7 @@ class Repositorio {
         cedula: cedula,
         nombre: (nombre != null && nombre.trim().isNotEmpty) ? nombre.trim() : null,
         nombreSri: nombre != null && nombre.trim().isNotEmpty ? nombreSri : null,
-        estado: c.pendiente ? Estado.aprobado : null,
+        estado: c.estado == Estado.pendienteCedula ? Estado.porConsultar : null,
         actualizadoEn: ahora,
       );
       await tx.update('clientes', nuevo.aFila(), where: 'id = ?', whereArgs: [id]);
@@ -225,6 +254,19 @@ class Repositorio {
     return nuevo;
   }
 
+  /// Trajo la cédula física: sale de Pendientes.
+  Future<Cliente> marcarDocumento(String id) async {
+    late Cliente nuevo;
+    await db.transaction((tx) async {
+      final c = Cliente.deFila((await tx.query('clientes', where: 'id = ?', whereArgs: [id])).first);
+      final ahora = DateTime.now();
+      nuevo = c.copiar(documento: true, actualizadoEn: ahora);
+      await tx.update('clientes', nuevo.aFila(), where: 'id = ?', whereArgs: [id]);
+      await _sellar(tx, id, 'documento', {'cedula': c.cedula}, ahora);
+    });
+    return nuevo;
+  }
+
   Future<Cliente> marcarAtendido(String id) async {
     late Cliente nuevo;
     await db.transaction((tx) async {
@@ -255,7 +297,9 @@ class Repositorio {
         nombreSri: c.nombre.trim() == antes.nombre ? antes.nombreSri : false,
         telefono: c.telefono.trim(),
         nota: c.nota.trim(),
-        estado: c.cedula == null ? Estado.pendienteCedula : (antes.pendiente ? Estado.aprobado : c.estado),
+        ciudad: c.ciudad.trim(),
+        documento: c.documento,
+        estado: c.cedula == null ? Estado.pendienteCedula : (c.estado == Estado.pendienteCedula ? Estado.porConsultar : c.estado),
         monto: c.monto,
         fechaConsulta: c.fechaConsulta,
         fechaVisita: c.fechaVisita,
@@ -264,7 +308,18 @@ class Repositorio {
       );
       final a = antes.aFila(), n = nuevo.aFila();
       final campos = [
-        for (final k in ['cedula', 'nombre', 'telefono', 'nota', 'estado', 'monto', 'fecha_consulta', 'fecha_visita'])
+        for (final k in [
+          'cedula',
+          'nombre',
+          'telefono',
+          'ciudad',
+          'documento',
+          'nota',
+          'estado',
+          'monto',
+          'fecha_consulta',
+          'fecha_visita',
+        ])
           if (a[k] != n[k]) k,
       ];
       if (campos.isEmpty) {

@@ -238,11 +238,11 @@ class _PestanaPendientes extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = clientes.where((c) => c.pendiente).toList()..sort((a, b) => a.creadoEn.compareTo(b.creadoEn));
-    if (l.isEmpty) return const Vacio(Icons.task_alt, 'No tienes clientes esperando traer la cédula.');
+    if (l.isEmpty) return const Vacio(Icons.task_alt, 'No tienes clientes que deban traer el documento.');
     return ListView(
       padding: const EdgeInsets.only(bottom: 96),
       children: [
-        _titulo(context, 'Van a traer la cédula (${l.length})'),
+        _titulo(context, 'Les falta traer el documento (${l.length})'),
         for (final c in l)
           FilaCliente(
             c,
@@ -277,6 +277,7 @@ class _PestanaClientes extends StatefulWidget {
 class _PestanaClientesState extends State<_PestanaClientes> {
   final _busqueda = TextEditingController();
   Estado? _filtro;
+  bool _soloSinDocumento = false;
 
   @override
   Widget build(BuildContext context) {
@@ -284,6 +285,7 @@ class _PestanaClientesState extends State<_PestanaClientes> {
     final palabras = q.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).toList();
     final l = widget.clientes
         .where((c) => _filtro == null || c.estado == _filtro)
+        .where((c) => !_soloSinDocumento || c.pendiente)
         .where((c) => palabras.every(c.textoBusqueda.contains))
         .toList();
     final solo10 = RegExp(r'^\d{10}$').hasMatch(_busqueda.text.trim());
@@ -310,10 +312,22 @@ class _PestanaClientesState extends State<_PestanaClientes> {
             children: [
               FilterChip(
                 label: Text('Todos (${widget.clientes.length})'),
-                selected: _filtro == null,
-                onSelected: (_) => setState(() => _filtro = null),
+                selected: _filtro == null && !_soloSinDocumento,
+                onSelected: (_) => setState(() {
+                  _filtro = null;
+                  _soloSinDocumento = false;
+                }),
               ),
-              for (final e in Estado.values) ...[
+              const SizedBox(width: 8),
+              FilterChip(
+                avatar: const Icon(Icons.hourglass_top, size: 18, color: Color(0xFFE08A00)),
+                label: Text('Falta documento (${widget.clientes.where((c) => c.pendiente).length})'),
+                selected: _soloSinDocumento,
+                onSelected: (v) => setState(() => _soloSinDocumento = v),
+              ),
+              for (final e in Estado.values.where(
+                (e) => e != Estado.pendienteCedula || widget.clientes.any((c) => c.estado == e),
+              )) ...[
                 const SizedBox(width: 8),
                 FilterChip(
                   avatar: Icon(iconoEstado(e), size: 18, color: colorEstado(e)),
@@ -367,7 +381,12 @@ class _PestanaResumenState extends State<_PestanaResumen> {
     bool enMes(DateTime? d) => d != null && d.year == _mes.year && d.month == _mes.month;
     final l = widget.clientes;
     final registrados = l.where((c) => enMes(c.creadoEn)).length;
-    final consultados = l.where((c) => c.cedula != null && enMes(c.fechaConsulta)).toList();
+    final consultados = l
+        .where(
+          (c) =>
+              c.cedula != null && c.estado != Estado.porConsultar && c.estado != Estado.pendienteCedula && enMes(c.fechaConsulta),
+        )
+        .toList();
     final aprobados = consultados.where((c) => c.estado == Estado.aprobado || c.estado == Estado.atendido).toList();
     final negados = consultados.where((c) => c.estado == Estado.negado).length;
     final vinieron = l.where((c) => c.estado == Estado.atendido && enMes(c.actualizadoEn)).toList();
@@ -448,8 +467,7 @@ class _PestanaResumenState extends State<_PestanaResumen> {
               Icons.shopping_bag_outlined,
               colorEstado(Estado.atendido),
             ),
-            if (esActual)
-              tarjeta('Pendientes de cédula', '$pendientes', Icons.hourglass_top, colorEstado(Estado.pendienteCedula)),
+            if (esActual) tarjeta('Falta documento', '$pendientes', Icons.hourglass_top, colorEstado(Estado.pendienteCedula)),
           ],
         ),
         const SizedBox(height: 12),

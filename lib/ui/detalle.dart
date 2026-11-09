@@ -96,6 +96,13 @@ class _PantallaDetalleState extends State<PantallaDetalle> {
     _nuevaConsulta();
   }
 
+  Future<void> _trajoDocumento() async {
+    if (!await confirmar(context, 'Documento', '¿${_c!.nombreVisible} ya trajo la cédula física?')) return;
+    await Base.repo.marcarDocumento(_id);
+    await _cambio();
+    if (mounted) aviso(context, 'Listo: salió de Pendientes');
+  }
+
   void _nuevaConsulta() {
     final c = _c;
     if (c?.cedula == null) return;
@@ -219,7 +226,11 @@ class _PantallaDetalleState extends State<PantallaDetalle> {
                         Text(c.nombreVisible, style: t.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                         if (c.nombreSri) Text('Nombre según el SRI', style: TextStyle(color: esq.onSurfaceVariant, fontSize: 12)),
                         const SizedBox(height: 6),
-                        ChipEstado(c.estado),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [ChipEstado(c.estado), if (c.cedula != null && !c.documento) const ChipFaltaDocumento()],
+                        ),
                       ],
                     ),
                   ),
@@ -230,7 +241,13 @@ class _PantallaDetalleState extends State<PantallaDetalle> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  if (c.pendiente)
+                  if (c.cedula != null && !c.documento)
+                    FilledButton.icon(
+                      onPressed: _trajoDocumento,
+                      icon: const Icon(Icons.badge),
+                      label: const Text('Ya trajo el documento'),
+                    ),
+                  if (c.cedula == null)
                     FilledButton.icon(
                       onPressed: _agregarCedula,
                       icon: const Icon(Icons.badge),
@@ -272,7 +289,14 @@ class _PantallaDetalleState extends State<PantallaDetalle> {
                         },
                       )
                     else
-                      dato(Icons.hourglass_top, 'Cédula', 'Todavía no la trae'),
+                      dato(Icons.hourglass_top, 'Cédula', 'Sin número anotado'),
+                    if (c.cedula != null)
+                      dato(
+                        c.documento ? Icons.check_box : Icons.hourglass_top,
+                        'Documento físico',
+                        c.documento ? 'Lo trajo' : 'Todavía no lo trae',
+                      ),
+                    if (c.ciudad.isNotEmpty) dato(Icons.location_city_outlined, 'Ciudad', c.ciudad),
                     if (c.estado == Estado.aprobado || c.estado == Estado.atendido)
                       dato(
                         Icons.payments_outlined,
@@ -283,7 +307,7 @@ class _PantallaDetalleState extends State<PantallaDetalle> {
                     if (c.fechaVisita != null)
                       dato(
                         Icons.event,
-                        c.pendiente ? 'Trae la cédula' : 'Puede venir',
+                        c.pendiente ? 'Trae el documento' : 'Puede venir',
                         '${Dia.relativo(c.fechaVisita!)} (${Dia.corto(c.fechaVisita!)})',
                       ),
                     if (c.telefono.isNotEmpty) dato(Icons.phone_outlined, 'Teléfono', c.telefono),
@@ -338,7 +362,7 @@ class _DialogoCedulaState extends State<_DialogoCedula> {
     String? nombre;
     if (widget.nombreActual.trim().isEmpty) {
       setState(() => _buscando = true);
-      nombre = await Sri.nombre(ced);
+      nombre = (await Sri.consultar(ced))?.nombre;
     }
     if (mounted) Navigator.pop(context, (ced, nombre));
   }
@@ -381,27 +405,29 @@ class _PantallaEditarState extends State<_PantallaEditar> {
   late final _nota = TextEditingController(text: widget.c.nota);
   late final _cedula = TextEditingController(text: widget.c.cedula ?? '');
   late final _monto = TextEditingController(text: widget.c.monto?.toStringAsFixed(2) ?? '');
-  late Estado _estado = widget.c.estado;
+  late final _ciudad = TextEditingController(text: widget.c.ciudad);
+  late bool _documento = widget.c.cedula != null && widget.c.documento;
+  late Estado _estado = widget.c.estado == Estado.pendienteCedula ? Estado.porConsultar : widget.c.estado;
   late DateTime? _visita = widget.c.fechaVisita;
   String? _errorCedula;
 
   void _guardar() {
     final ced = _cedula.text.trim();
-    if (ced.isNotEmpty) {
-      final e = Identificacion.errorCedula(ced);
-      if (e != null) return setState(() => _errorCedula = e);
-    }
+    final e = Identificacion.errorCedula(ced);
+    if (e != null) return setState(() => _errorCedula = e);
     final m = double.tryParse(_monto.text.trim().replaceAll(',', '.'));
     Navigator.pop(
       context,
       Cliente(
         id: widget.c.id,
-        cedula: ced.isEmpty ? null : ced,
+        cedula: ced,
         nombre: _nombre.text,
         telefono: _telefono.text,
         nota: _nota.text,
+        ciudad: _ciudad.text,
+        documento: _documento,
         estado: _estado,
-        monto: _estado == Estado.negado ? null : m,
+        monto: _estado == Estado.aprobado || _estado == Estado.atendido ? m : null,
         fechaConsulta: widget.c.fechaConsulta,
         fechaVisita: _visita,
         creadoEn: widget.c.creadoEn,
@@ -434,11 +460,18 @@ class _PantallaEditarState extends State<_PantallaEditar> {
                 controller: _cedula,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
-                decoration: InputDecoration(
-                  labelText: 'Cédula',
-                  errorText: _errorCedula,
-                  helperText: 'Vacía = pendiente de cédula',
-                ),
+                decoration: InputDecoration(labelText: 'Número de cédula *', errorText: _errorCedula),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Trajo el documento (cédula física)'),
+                value: _documento,
+                onChanged: (v) => setState(() => _documento = v),
+              ),
+              TextField(
+                controller: _ciudad,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Ciudad donde vive'),
               ),
               e,
               TextField(
@@ -447,9 +480,9 @@ class _PantallaEditarState extends State<_PantallaEditar> {
                 decoration: const InputDecoration(labelText: 'Teléfono'),
               ),
               e,
-              if (_cedula.text.trim().isNotEmpty && widget.c.cedula != null) ...[
+              ...[
                 DropdownButtonFormField<Estado>(
-                  initialValue: _estado == Estado.pendienteCedula ? Estado.aprobado : _estado,
+                  initialValue: _estado,
                   decoration: const InputDecoration(labelText: 'Estado'),
                   items: [
                     for (final s in Estado.values.where((s) => s != Estado.pendienteCedula))
@@ -458,7 +491,7 @@ class _PantallaEditarState extends State<_PantallaEditar> {
                   onChanged: (s) => setState(() => _estado = s!),
                 ),
                 e,
-                if (_estado != Estado.negado) ...[
+                if (_estado == Estado.aprobado || _estado == Estado.atendido) ...[
                   TextField(
                     controller: _monto,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),

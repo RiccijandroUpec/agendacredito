@@ -9,8 +9,10 @@ void main() {
   late Database db;
 
   setUp(() async {
-    db = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath,
-        options: OpenDatabaseOptions(version: Repositorio.version, onCreate: Repositorio.crear));
+    db = await databaseFactoryFfi.openDatabase(
+      inMemoryDatabasePath,
+      options: OpenDatabaseOptions(version: Repositorio.version, onCreate: Repositorio.crear),
+    );
     repo = Repositorio(db);
   });
   tearDown(() => db.close());
@@ -65,8 +67,16 @@ void main() {
 
   test('editar no cambia la fecha de registro; exportar e importar', () async {
     final c = await repo.registrar(nuevo(cedula: '1710034065', nombre: 'Ana'));
-    final e = await repo.editar(Cliente(
-        id: c.id, cedula: c.cedula, nombre: 'Ana María', estado: c.estado, creadoEn: DateTime(2000), actualizadoEn: DateTime.now()));
+    final e = await repo.editar(
+      Cliente(
+        id: c.id,
+        cedula: c.cedula,
+        nombre: 'Ana María',
+        estado: c.estado,
+        creadoEn: DateTime(2000),
+        actualizadoEn: DateTime.now(),
+      ),
+    );
     expect(e.creadoEn, c.creadoEn);
     expect(e.nombre, 'Ana María');
     final datos = await repo.exportar();

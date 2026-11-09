@@ -37,6 +37,7 @@ class Base {
       password: clave,
       version: Repositorio.version,
       onCreate: Repositorio.crear,
+      onUpgrade: Repositorio.migrar,
       // La burbuja y la app abren la base a la vez: que esperen en vez de fallar.
       onConfigure: (db) async => db.rawQuery('PRAGMA busy_timeout = 5000'),
     );

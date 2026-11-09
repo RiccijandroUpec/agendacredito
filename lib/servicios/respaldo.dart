@@ -95,7 +95,9 @@ class Respaldo {
       return s.contains(RegExp(r'[;"\n]')) ? '"$s"' : s;
     }
 
-    final sb = StringBuffer('﻿Cédula;Nombre;Teléfono;Estado;Cupo aprobado;Fecha consulta;Puede venir;Registrado;Nota\r\n');
+    final sb = StringBuffer(
+      '﻿Cédula;Nombre;Teléfono;Ciudad;Trajo documento;Estado;Cupo aprobado;Fecha consulta;Puede venir;Registrado;Nota\r\n',
+    );
     for (final x in clientes) {
       sb.write(
         [
@@ -103,6 +105,8 @@ class Respaldo {
           x.cedula == null ? '' : '="${x.cedula}"',
           c(x.nombre),
           c(x.telefono),
+          c(x.ciudad),
+          x.cedula != null && x.documento ? 'Sí' : 'No',
           c(x.estado.etiqueta),
           x.monto?.toStringAsFixed(2).replaceAll('.', ',') ?? '',
           x.fechaConsulta == null ? '' : Dia.texto(x.fechaConsulta!),

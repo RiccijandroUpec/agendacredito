@@ -10,7 +10,12 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('Cédula', () {
     test('válidas', () {
-      for (final c in ['1710034065', '0926687856', '0102030405'.substring(0, 9) + _dv('010203040'), '3050000008'.substring(0, 9) + _dv('305000000')]) {
+      for (final c in [
+        '1710034065',
+        '0926687856',
+        '0102030405'.substring(0, 9) + _dv('010203040'),
+        '3050000008'.substring(0, 9) + _dv('305000000'),
+      ]) {
         expect(Identificacion.cedulaValida(c), isTrue, reason: c);
       }
     });
@@ -58,8 +63,10 @@ void main() {
       final c = Cifrado.cifrar(datos, 'clave segura');
       expect(Cifrado.descifrar(c, 'clave segura'), datos);
       expect(() => Cifrado.descifrar(c, 'otra'), throwsFormatException);
-      expect(() => Cifrado.descifrar(Uint8List.fromList(utf8.encode('hola mundo hola mundo hola mundo hola mundo hola')), 'x'),
-          throwsFormatException);
+      expect(
+        () => Cifrado.descifrar(Uint8List.fromList(utf8.encode('hola mundo hola mundo hola mundo hola mundo hola')), 'x'),
+        throwsFormatException,
+      );
     });
     test('PIN', () {
       final h = Cifrado.hashPin('482915');

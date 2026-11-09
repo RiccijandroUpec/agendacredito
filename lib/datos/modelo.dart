@@ -1,8 +1,10 @@
 import 'package:intl/intl.dart';
 
 enum Estado {
-  pendienteCedula('pendiente_cedula', 'Pendiente de cédula'),
+  /// Solo registros viejos (1.0.x) guardados sin número de cédula.
+  pendienteCedula('pendiente_cedula', 'Sin cédula'),
   aprobado('aprobado', 'Aprobado'),
+  porConsultar('por_consultar', 'Por consultar'),
   negado('negado', 'Negado'),
   atendido('atendido', 'Ya vino');
 
@@ -47,6 +49,10 @@ class Cliente {
   final bool nombreSri;
   final String telefono;
   final String nota;
+  final String ciudad;
+
+  /// false = dio el número pero no trajo la cédula física: queda en Pendientes.
+  final bool documento;
   final Estado estado;
 
   /// Cupo de crédito aprobado por la empresa.
@@ -65,6 +71,8 @@ class Cliente {
     this.nombreSri = false,
     this.telefono = '',
     this.nota = '',
+    this.ciudad = '',
+    this.documento = true,
     required this.estado,
     this.monto,
     this.fechaConsulta,
@@ -81,7 +89,8 @@ class Cliente {
       ? 'Tel. $telefono'
       : 'Sin nombre';
 
-  bool get pendiente => estado == Estado.pendienteCedula;
+  /// Le falta traer la cédula física (o, en registros viejos, el número).
+  bool get pendiente => cedula == null || !documento;
   bool get porVenir => estado != Estado.atendido && estado != Estado.negado && fechaVisita != null;
 
   Map<String, Object?> aFila() => {
@@ -91,6 +100,8 @@ class Cliente {
     'nombre_sri': nombreSri ? 1 : 0,
     'telefono': telefono,
     'nota': nota,
+    'ciudad': ciudad,
+    'documento': documento ? 1 : 0,
     'estado': estado.clave,
     'monto': monto,
     'fecha_consulta': fechaConsulta == null ? null : Dia.texto(fechaConsulta!),
@@ -106,6 +117,8 @@ class Cliente {
     nombreSri: f['nombre_sri'] == 1,
     telefono: (f['telefono'] as String?) ?? '',
     nota: (f['nota'] as String?) ?? '',
+    ciudad: (f['ciudad'] as String?) ?? '',
+    documento: f['documento'] != 0,
     estado: Estado.desde(f['estado'] as String),
     monto: (f['monto'] as num?)?.toDouble(),
     fechaConsulta: Dia.leer(f['fecha_consulta'] as String?),
@@ -120,6 +133,8 @@ class Cliente {
     bool? nombreSri,
     String? telefono,
     String? nota,
+    String? ciudad,
+    bool? documento,
     Estado? estado,
     double? Function()? monto,
     DateTime? Function()? fechaConsulta,
@@ -132,6 +147,8 @@ class Cliente {
     nombreSri: nombreSri ?? this.nombreSri,
     telefono: telefono ?? this.telefono,
     nota: nota ?? this.nota,
+    ciudad: ciudad ?? this.ciudad,
+    documento: documento ?? this.documento,
     estado: estado ?? this.estado,
     monto: monto != null ? monto() : this.monto,
     fechaConsulta: fechaConsulta != null ? fechaConsulta() : this.fechaConsulta,
@@ -141,7 +158,7 @@ class Cliente {
   );
 
   /// Texto sin tildes y en minúsculas para buscar.
-  String get textoBusqueda => normalizar('$nombre ${cedula ?? ''} $telefono $nota');
+  String get textoBusqueda => normalizar('$nombre ${cedula ?? ''} $telefono $ciudad $nota');
 }
 
 String normalizar(String s) {
@@ -169,9 +186,15 @@ class Evento {
     String? m() => d['monto'] == null ? null : dinero.format(d['monto']);
     String? v() => d['fecha_visita'] == null ? null : 'puede venir ${Dia.corto(DateTime.parse(d['fecha_visita']))}';
     return switch (tipo) {
-      'registro' => ['Registrado', if (d['cedula'] != null) 'con cédula ${d['cedula']}' else 'sin cédula', ?v()].join(' · '),
+      'registro' => [
+        'Registrado',
+        if (d['cedula'] != null) 'con cédula ${d['cedula']}' else 'sin cédula',
+        if (d['documento'] == false) 'falta el documento',
+        ?v(),
+      ].join(' · '),
       'consulta' => ['Consulta: ${Estado.desde(d['estado'] ?? '').etiqueta}', ?m(), ?v()].join(' · '),
-      'cedula' => 'Trajo la cédula ${d['cedula']}',
+      'cedula' => 'Se anotó la cédula ${d['cedula']}',
+      'documento' => 'Trajo el documento (cédula física)',
       'atendido' => 'Vino a usar el crédito',
       'edicion' => 'Datos editados (${(d['campos'] as List?)?.join(', ') ?? ''})',
       'unido' => 'Se unió con otro registro de ${d['nombre'] ?? 'este cliente'}',
